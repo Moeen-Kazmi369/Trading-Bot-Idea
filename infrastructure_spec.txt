@@ -1,0 +1,57 @@
+# --- .gitignore ---
+data/
+models/*.pth
+.venv/
+__pycache__/
+*.log
+.env
+# Keep just the dry-run weights for testing
+!models/cloud_siege_dummy_v1.pth
+
+# --- Dockerfile ---
+# Use a high-performance PyTorch GPU base
+FROM pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime
+
+WORKDIR /app
+
+# Install dependencies
+RUN pip install pandas pandas_ta google-cloud-storage scikit-learn rich
+
+# Copy source code
+COPY src/ /app/src/
+COPY data/raw/ /app/data/raw/ 
+
+# Force Python Path for imports
+ENV PYTHONPATH="/app"
+
+# Command to execute the Deep Forge
+ENTRYPOINT ["python", "src/neural/universal_decision_trainer.py"]
+
+# --- .github/workflows/deploy_vertex.yml ---
+name: Vertex AI Deep Forge
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  forge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Auth to GCP
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up GCP Cloud Build
+        run: |
+          gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/sentinel-forge .
+
+      - name: Trigger Vertex AI Job
+        run: |
+          gcloud ai custom-jobs create \
+            --region=us-central1 \
+            --display-name=chronos-universal-forge-v3 \
+            --worker-pool-spec=machine-type=n1-standard-4,accelerator-type=nvidia-tesla-t4,accelerator-count=1,container-image-uri=gcr.io/${{ secrets.GCP_PROJECT_ID }}/sentinel-forge

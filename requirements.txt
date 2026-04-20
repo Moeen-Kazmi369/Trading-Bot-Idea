@@ -1,0 +1,9 @@
+python-binance
+pandas
+numpy
+google-generativeai
+python-dotenv
+rich
+apscheduler
+ccxt
+scipy

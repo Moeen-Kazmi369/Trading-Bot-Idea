@@ -1,0 +1,10 @@
+data/
+models/*.pth
+.venv/
+__pycache__/
+*.log
+.env
+.idea/
+.vscode/
+# Keep just the dry-run weights for testing
+!models/cloud_siege_dummy_v1.pth
