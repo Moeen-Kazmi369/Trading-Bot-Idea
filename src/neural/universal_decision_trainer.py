@@ -14,6 +14,7 @@ console = Console()
 def prepare_split_data():
     """
     Universal Mastery Forge: 6 Coins x 3 Resolutions (18x Data Scaling).
+    TURBO-OPTIMIZED for rapid tensor assembly.
     """
     symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "ADAUSDT", "XRPUSDT"]
     timeframes = [5, 15, 60]
@@ -23,13 +24,12 @@ def prepare_split_data():
     
     for sym in symbols:
         for tf in timeframes:
-            path = f"data/raw/{sym}_5m.csv" # Always start from 5m base
+            path = f"data/raw/{sym}_5m.csv"
             if not os.path.exists(path): continue
             
-            console.print(f"  [bold blue]FORGING:[/bold blue] {sym} at {tf}m Resolution...")
+            console.print(f"  [bold blue]TURBO-FORGING:[/bold blue] {sym} at {tf}m Resolution...")
             df_raw = pd.read_csv(path)
             
-            # Resample for higher timeframes
             if tf > 5:
                 df_raw = df_raw.iloc[::(tf//5)].copy()
                 
@@ -37,30 +37,43 @@ def prepare_split_data():
             df_train, cols = prepare_30d_universal_manifold(df_raw.iloc[:split_idx], timeframe_mins=tf)
             df_val, _ = prepare_30d_universal_manifold(df_raw.iloc[split_idx:], timeframe_mins=tf)
             
-            def get_tensors(df, feature_cols):
-                X, C, Y = [], [], []
+            def get_tensors_turbo(df, feature_cols):
                 feat_vals = df[feature_cols].values
-                # Adaptive Step: Faster for 5m, Precise for 1h
+                closes = df['close'].values
+                c_tf = df['c_timeframe'].values
+                c_fe = df['c_fee'].values
+                
                 step = 25 if tf == 5 else 5
-                for i in range(50, len(df)-10, step):
-                    X.append(feat_vals[i-50:i])
-                    C.append([df.iloc[i]['c_timeframe'], df.iloc[i]['c_fee']])
-                    roi = (df.iloc[i+6]['close'] - df.iloc[i]['close']) / df.iloc[i]['close']
-                    Y.append(1 if roi > 0.0016 else (2 if roi < -0.0016 else 0))
+                idx = np.arange(50, len(df)-10, step)
+                
+                if len(idx) == 0: return None, None, None
+
+                # Vectorized Slice Assembly
+                X = np.stack([feat_vals[i-50:i] for i in idx])
+                C = np.column_stack([c_tf[idx], c_fe[idx]])
+                
+                roi = (closes[idx+6] - closes[idx]) / closes[idx]
+                Y = np.zeros(len(idx), dtype=int)
+                Y[roi > 0.0016] = 1
+                Y[roi < -0.0016] = 2
+                
                 return X, C, Y
 
-            tx, tc, ty = get_tensors(df_train, cols)
-            vx, vc, vy = get_tensors(df_val, cols)
+            tx, tc, ty = get_tensors_turbo(df_train, cols)
+            vx, vc, vy = get_tensors_turbo(df_val, cols)
             
-            all_train_X.extend(tx); all_train_C.extend(tc); all_train_Y.extend(ty)
-            all_val_X.extend(vx); all_val_C.extend(vc); all_val_Y.extend(vy)
+            if tx is not None:
+                all_train_X.append(tx); all_train_C.append(tc); all_train_Y.append(ty)
+            if vx is not None:
+                all_val_X.append(vx); all_val_C.append(vc); all_val_Y.append(vy)
     
-    return torch.tensor(np.array(all_train_X)).float(), \
-           torch.tensor(np.array(all_train_C)).float(), \
-           torch.tensor(np.array(all_train_Y)).long(), \
-           torch.tensor(np.array(all_val_X)).float(), \
-           torch.tensor(np.array(all_val_C)).float(), \
-           torch.tensor(np.array(all_val_Y)).long()
+    # Accelerated Tensor Conversion
+    return torch.from_numpy(np.concatenate(all_train_X)).float(), \
+           torch.from_numpy(np.concatenate(all_train_C)).float(), \
+           torch.from_numpy(np.concatenate(all_train_Y)).long(), \
+           torch.from_numpy(np.concatenate(all_val_X)).float(), \
+           torch.from_numpy(np.concatenate(all_val_C)).float(), \
+           torch.from_numpy(np.concatenate(all_val_Y)).long()
 
 def train_with_guard(epochs=1000):
     console.print(f"[bold cyan]COLAB MASTERY FORGE:[/bold cyan] Initiating 1,000-Epoch Deep Siege...")
