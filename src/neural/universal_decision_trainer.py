@@ -43,17 +43,17 @@ def prepare_split_data(sym_train="BTCUSDT", sym_val="ETHUSDT", tf=60):
     
     return train_X, train_C, train_Y, val_X, val_C, val_Y
 
-def train_with_guard(epochs=50):
-    console.print(f"[bold cyan]CLOUD SIEGE GUARD:[/bold cyan] Initiating Cross-Symbol Walk-Forward Forge...")
+def train_with_guard(epochs=1000):
+    console.print(f"[bold cyan]COLAB MASTERY FORGE:[/bold cyan] Initiating 1,000-Epoch Deep Siege...")
     
     # 1. Load Guarded Data
     t_X, t_C, t_Y, v_X, v_C, v_Y = prepare_split_data()
-    train_loader = DataLoader(TensorDataset(t_X, t_C, t_Y), batch_size=256, shuffle=True)
-    val_loader = DataLoader(TensorDataset(v_X, v_C, v_Y), batch_size=256)
+    train_loader = DataLoader(TensorDataset(t_X, t_C, t_Y), batch_size=512, shuffle=True)
+    val_loader = DataLoader(TensorDataset(v_X, v_C, v_Y), batch_size=512)
     
     # 2. Model Init
     model = UniversalOracleV2(feature_dim=30, hidden_dim=256)
-    optimizer = optim.Adam(model.parameters(), lr=5e-5)
+    optimizer = optim.Adam(model.parameters(), lr=1e-5) # Ultra Slow-Burn
     criterion = nn.CrossEntropyLoss()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
