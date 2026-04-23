@@ -88,9 +88,12 @@ def train_with_guard(epochs=1000):
         
         console.print(f"  Epoch {epoch+1}/{epochs} | Train Loss: [bold blue]{t_avg:.4f}[/bold blue] | Val Loss: [bold yellow]{v_avg:.4f}[/bold yellow]")
         
-        # Overfit Warning
-        if v_avg > t_avg * 1.2:
-            console.print("  [bold red]OVERFIT WARNING:[/bold red] Validation divergence detected. Memorization active.")
+        # --- AUTO-SNAPSHOT every 50 epochs ---
+        if (epoch + 1) % 50 == 0:
+            snap_path = f"models/universal_oracle_snap_{epoch+1}.pth"
+            os.makedirs("models", exist_ok=True)
+            torch.save(model.state_dict(), snap_path)
+            console.print(f"  [bold cyan]SNAPSHOT:[/bold cyan] Progress saved to {snap_path}")
 
     torch.save(model.state_dict(), "models/universal_oracle_guarded_v2.pth")
     console.print("\n[bold green]CLOUD SIEGE GUARD COMPLETE.[/bold green]")
