@@ -13,15 +13,23 @@ console = Console()
 
 def prepare_split_data(sym_train="BTCUSDT", sym_val="ETHUSDT", tf=60):
     """
-    Implements a Cross-Symbol Temporal Split.
-    Training on Symbol A, Validating on Symbol B (Out-of-Sample Time).
+    Guarded Data Split: Supports Cross-Symbol or Temporal-only.
     """
-    # 1. Training Set (80% of BTC)
-    df_train_raw = pd.read_csv(f"data/raw/{sym_train}_5m.csv").iloc[:40000]
-    df_train, cols = prepare_30d_universal_manifold(df_train_raw, timeframe_mins=tf)
+    path_train = f"data/raw/{sym_train}_5m.csv"
+    path_val = f"data/raw/{sym_val}_5m.csv"
     
-    # 2. Validation Set (Last 20% of ETH)
-    df_val_raw = pd.read_csv(f"data/raw/{sym_val}_5m.csv").iloc[40000:]
+    # Check if Validation File exists
+    if not os.path.exists(path_val):
+        console.print(f"[bold yellow]WARNING:[/bold yellow] {path_val} not found. Performing Temporal Split on {sym_train}.")
+        df_full = pd.read_csv(path_train)
+        split_idx = int(len(df_full) * 0.8)
+        df_train_raw = df_full.iloc[:split_idx]
+        df_val_raw = df_full.iloc[split_idx:]
+    else:
+        df_train_raw = pd.read_csv(path_train).iloc[:40000]
+        df_val_raw = pd.read_csv(path_val).iloc[40000:]
+    
+    df_train, cols = prepare_30d_universal_manifold(df_train_raw, timeframe_mins=tf)
     df_val, _ = prepare_30d_universal_manifold(df_val_raw, timeframe_mins=tf)
     
     def get_tensors(df, feature_cols):
