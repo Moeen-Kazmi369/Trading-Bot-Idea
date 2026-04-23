@@ -11,40 +11,49 @@ from rich.console import Console
 
 console = Console()
 
-def prepare_split_data(tf=60):
+def prepare_split_data():
     """
-    Multi-Asset Forge: Ingests BTC, ETH, and SOL to force Generalization.
+    Universal Mastery Forge: 6 Coins x 3 Resolutions (18x Data Scaling).
     """
-    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "ADAUSDT", "XRPUSDT"]
+    timeframes = [5, 15, 60]
+    
     all_train_X, all_train_C, all_train_Y = [], [], []
     all_val_X, all_val_C, all_val_Y = [], [], []
     
     for sym in symbols:
-        path = f"data/raw/{sym}_5m.csv"
-        if not os.path.exists(path): continue
-        
-        console.print(f"  [bold blue]INGESTING:[/bold blue] {sym} into the Manifold...")
-        df_full = pd.read_csv(path)
-        split_idx = int(len(df_full) * 0.8)
-        
-        df_train, cols = prepare_30d_universal_manifold(df_full.iloc[:split_idx], timeframe_mins=tf)
-        df_val, _ = prepare_30d_universal_manifold(df_full.iloc[split_idx:], timeframe_mins=tf)
-        
-        def get_tensors(df, feature_cols):
-            X, C, Y = [], [], []
-            feat_vals = df[feature_cols].values
-            for i in range(50, len(df)-10, 25): # Increased step for more data
-                X.append(feat_vals[i-50:i])
-                C.append([df.iloc[i]['c_timeframe'], df.iloc[i]['c_fee']])
-                roi = (df.iloc[i+6]['close'] - df.iloc[i]['close']) / df.iloc[i]['close']
-                Y.append(1 if roi > 0.0016 else (2 if roi < -0.0016 else 0))
-            return X, C, Y
+        for tf in timeframes:
+            path = f"data/raw/{sym}_5m.csv" # Always start from 5m base
+            if not os.path.exists(path): continue
+            
+            console.print(f"  [bold blue]FORGING:[/bold blue] {sym} at {tf}m Resolution...")
+            df_raw = pd.read_csv(path)
+            
+            # Resample for higher timeframes
+            if tf > 5:
+                df_raw = df_raw.iloc[::(tf//5)].copy()
+                
+            split_idx = int(len(df_raw) * 0.8)
+            df_train, cols = prepare_30d_universal_manifold(df_raw.iloc[:split_idx], timeframe_mins=tf)
+            df_val, _ = prepare_30d_universal_manifold(df_raw.iloc[split_idx:], timeframe_mins=tf)
+            
+            def get_tensors(df, feature_cols):
+                X, C, Y = [], [], []
+                feat_vals = df[feature_cols].values
+                # Adaptive Step: Faster for 5m, Precise for 1h
+                step = 25 if tf == 5 else 5
+                for i in range(50, len(df)-10, step):
+                    X.append(feat_vals[i-50:i])
+                    C.append([df.iloc[i]['c_timeframe'], df.iloc[i]['c_fee']])
+                    roi = (df.iloc[i+6]['close'] - df.iloc[i]['close']) / df.iloc[i]['close']
+                    Y.append(1 if roi > 0.0016 else (2 if roi < -0.0016 else 0))
+                return X, C, Y
 
-        tx, tc, ty = get_tensors(df_train, cols)
-        vx, vc, vy = get_tensors(df_val, cols)
-        
-        all_train_X.extend(tx); all_train_C.extend(tc); all_train_Y.extend(ty)
-        all_val_X.extend(vx); all_val_C.extend(vc); all_val_Y.extend(vy)
+            tx, tc, ty = get_tensors(df_train, cols)
+            vx, vc, vy = get_tensors(df_val, cols)
+            
+            all_train_X.extend(tx); all_train_C.extend(tc); all_train_Y.extend(ty)
+            all_val_X.extend(vx); all_val_C.extend(vc); all_val_Y.extend(vy)
     
     return torch.tensor(np.array(all_train_X)).float(), \
            torch.tensor(np.array(all_train_C)).float(), \
