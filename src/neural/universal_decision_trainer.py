@@ -5,11 +5,13 @@ from torch.utils.data import TensorDataset, DataLoader
 import pandas as pd
 import numpy as np
 import os
+import sys
 from src.neural.transformer_brain import UniversalOracleV2
 from src.neural.universal_manifold import prepare_30d_universal_manifold
 from rich.console import Console
 
-console = Console()
+# force_terminal=True ensures rich streams live even inside Colab subprocesses
+console = Console(force_terminal=True, highlight=False)
 
 SEQ_LEN = 50
 FEATURE_DIM = 30
@@ -168,7 +170,8 @@ def train_with_guard(epochs=1000):
         # Divergence warning
         gap = v_avg - t_avg
         gap_tag = f"  [bold red]⚠ OVERFIT GAP={gap:.3f}[/bold red]" if gap > 0.08 else ""
-        console.print(f"  Epoch {epoch+1}/{epochs} | Train: [bold blue]{t_avg:.4f}[/bold blue] | Val: [bold yellow]{v_avg:.4f}[/bold yellow]{gap_tag}")
+        # Plain print with flush=True — guaranteed live heartbeat in any environment
+        print(f"  Epoch {epoch+1}/{epochs} | Train: {t_avg:.4f} | Val: {v_avg:.4f}{gap_tag}", flush=True)
 
         # Best model tracker
         if v_avg < best_val_loss:
