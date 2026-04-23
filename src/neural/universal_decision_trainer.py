@@ -11,45 +11,47 @@ from rich.console import Console
 
 console = Console()
 
-def prepare_split_data(sym_train="BTCUSDT", sym_val="ETHUSDT", tf=60):
+def prepare_split_data(tf=60):
     """
-    Guarded Data Split: Supports Cross-Symbol or Temporal-only.
+    Multi-Asset Forge: Ingests BTC, ETH, and SOL to force Generalization.
     """
-    path_train = f"data/raw/{sym_train}_5m.csv"
-    path_val = f"data/raw/{sym_val}_5m.csv"
+    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    all_train_X, all_train_C, all_train_Y = [], [], []
+    all_val_X, all_val_C, all_val_Y = [], [], []
     
-    # Check if Validation File exists
-    if not os.path.exists(path_val):
-        console.print(f"[bold yellow]WARNING:[/bold yellow] {path_val} not found. Performing Temporal Split on {sym_train}.")
-        df_full = pd.read_csv(path_train)
+    for sym in symbols:
+        path = f"data/raw/{sym}_5m.csv"
+        if not os.path.exists(path): continue
+        
+        console.print(f"  [bold blue]INGESTING:[/bold blue] {sym} into the Manifold...")
+        df_full = pd.read_csv(path)
         split_idx = int(len(df_full) * 0.8)
-        df_train_raw = df_full.iloc[:split_idx]
-        df_val_raw = df_full.iloc[split_idx:]
-    else:
-        df_train_raw = pd.read_csv(path_train).iloc[:40000]
-        df_val_raw = pd.read_csv(path_val).iloc[40000:]
-    
-    df_train, cols = prepare_30d_universal_manifold(df_train_raw, timeframe_mins=tf)
-    df_val, _ = prepare_30d_universal_manifold(df_val_raw, timeframe_mins=tf)
-    
-    def get_tensors(df, feature_cols):
-        X, C, Y = [], [], []
-        feat_vals = df[feature_cols].values
-        for i in range(50, len(df)-10, 50):
-            X.append(feat_vals[i-50:i])
-            C.append([df.iloc[i]['c_timeframe'], df.iloc[i]['c_fee']])
-            # Simple Profit Expert Label
-            roi = (df.iloc[i+6]['close'] - df.iloc[i]['close']) / df.iloc[i]['close']
-            label = 0
-            if roi > 0.0016: label = 1
-            elif roi < -0.0016: label = 2
-            Y.append(label)
-        return torch.tensor(np.array(X)).float(), torch.tensor(np.array(C)).float(), torch.tensor(np.array(Y)).long()
+        
+        df_train, cols = prepare_30d_universal_manifold(df_full.iloc[:split_idx], timeframe_mins=tf)
+        df_val, _ = prepare_30d_universal_manifold(df_full.iloc[split_idx:], timeframe_mins=tf)
+        
+        def get_tensors(df, feature_cols):
+            X, C, Y = [], [], []
+            feat_vals = df[feature_cols].values
+            for i in range(50, len(df)-10, 25): # Increased step for more data
+                X.append(feat_vals[i-50:i])
+                C.append([df.iloc[i]['c_timeframe'], df.iloc[i]['c_fee']])
+                roi = (df.iloc[i+6]['close'] - df.iloc[i]['close']) / df.iloc[i]['close']
+                Y.append(1 if roi > 0.0016 else (2 if roi < -0.0016 else 0))
+            return X, C, Y
 
-    train_X, train_C, train_Y = get_tensors(df_train, cols)
-    val_X, val_C, val_Y = get_tensors(df_val, cols)
+        tx, tc, ty = get_tensors(df_train, cols)
+        vx, vc, vy = get_tensors(df_val, cols)
+        
+        all_train_X.extend(tx); all_train_C.extend(tc); all_train_Y.extend(ty)
+        all_val_X.extend(vx); all_val_C.extend(vc); all_val_Y.extend(vy)
     
-    return train_X, train_C, train_Y, val_X, val_C, val_Y
+    return torch.tensor(np.array(all_train_X)).float(), \
+           torch.tensor(np.array(all_train_C)).float(), \
+           torch.tensor(np.array(all_train_Y)).long(), \
+           torch.tensor(np.array(all_val_X)).float(), \
+           torch.tensor(np.array(all_val_C)).float(), \
+           torch.tensor(np.array(all_val_Y)).long()
 
 def train_with_guard(epochs=1000):
     console.print(f"[bold cyan]COLAB MASTERY FORGE:[/bold cyan] Initiating 1,000-Epoch Deep Siege...")
