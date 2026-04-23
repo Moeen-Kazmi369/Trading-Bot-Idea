@@ -6,12 +6,17 @@ import pandas as pd
 import numpy as np
 import os
 import sys
+import shutil
 from src.neural.transformer_brain import UniversalOracleV2
 from src.neural.universal_manifold import prepare_30d_universal_manifold
 from rich.console import Console
 
 # force_terminal=True ensures rich streams live even inside Colab subprocesses
 console = Console(force_terminal=True, highlight=False)
+
+# Google Drive backup directory (survives runtime resets)
+DRIVE_SNAP_DIR = "/content/drive/MyDrive/ChronosData/snapshots"
+LOCAL_SNAP_DIR = "models"
 
 SEQ_LEN = 50
 FEATURE_DIM = 30
@@ -121,6 +126,45 @@ def prepare_split_data():
     return t_X, t_C, t_Y, v_X, v_C, v_Y
 
 
+def _save_snapshot(model, epoch, best_val_loss):
+    """Dual-save: local models/ AND Google Drive (survives runtime resets)."""
+    os.makedirs(LOCAL_SNAP_DIR, exist_ok=True)
+    local_path = f"{LOCAL_SNAP_DIR}/universal_oracle_snap_{epoch}.pth"
+    torch.save({"epoch": epoch, "model_state": model.state_dict(), "best_val_loss": best_val_loss}, local_path)
+
+    # Mirror to Drive if available
+    if os.path.exists("/content/drive"):
+        os.makedirs(DRIVE_SNAP_DIR, exist_ok=True)
+        drive_path = f"{DRIVE_SNAP_DIR}/universal_oracle_snap_{epoch}.pth"
+        shutil.copy(local_path, drive_path)
+        print(f"  SNAPSHOT: Epoch {epoch} saved → Drive ({drive_path})", flush=True)
+    else:
+        print(f"  SNAPSHOT: Epoch {epoch} saved → Local only", flush=True)
+
+
+def _find_latest_snapshot():
+    """
+    Scans Drive first (persistent), then local. Returns (path, epoch) or (None, 0).
+    """
+    best_epoch = 0
+    best_path  = None
+
+    for snap_dir in [DRIVE_SNAP_DIR, LOCAL_SNAP_DIR]:
+        if not os.path.exists(snap_dir):
+            continue
+        for fname in os.listdir(snap_dir):
+            if fname.startswith("universal_oracle_snap_") and fname.endswith(".pth"):
+                try:
+                    ep = int(fname.replace("universal_oracle_snap_", "").replace(".pth", ""))
+                    if ep > best_epoch:
+                        best_epoch = ep
+                        best_path  = os.path.join(snap_dir, fname)
+                except ValueError:
+                    pass
+
+    return best_path, best_epoch
+
+
 def train_with_guard(epochs=1000):
     console.print(f"[bold cyan]COLAB MASTERY FORGE:[/bold cyan] Initiating 1,000-Epoch Deep Siege...")
 
@@ -134,15 +178,30 @@ def train_with_guard(epochs=1000):
     console.print(f"  [bold green]DEVICE:[/bold green] {str(device).upper()}")
 
     model = UniversalOracleV2(feature_dim=FEATURE_DIM, hidden_dim=256)
-    model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-5)   # Ultra Slow-Burn
     criterion = nn.CrossEntropyLoss()
 
-    os.makedirs("models", exist_ok=True)
+    os.makedirs(LOCAL_SNAP_DIR, exist_ok=True)
 
-    # 3. Training Loop with Overfit Guard + Auto-Snapshot
+    # 3. AUTO-RESUME: Find and load the latest snapshot from Drive
+    start_epoch   = 0
     best_val_loss = float('inf')
-    for epoch in range(epochs):
+    snap_path, snap_epoch = _find_latest_snapshot()
+
+    if snap_path:
+        checkpoint = torch.load(snap_path, map_location=device)
+        model.load_state_dict(checkpoint["model_state"])
+        start_epoch   = checkpoint["epoch"]          # resume AFTER this epoch
+        best_val_loss = checkpoint.get("best_val_loss", float('inf'))
+        print(f"  RESUMED: Loaded Epoch {start_epoch} snapshot from {snap_path}", flush=True)
+        print(f"  Best Val Loss so far: {best_val_loss:.4f}", flush=True)
+    else:
+        print("  FRESH START: No snapshot found — training from Epoch 1", flush=True)
+
+    model.to(device)
+
+    # 4. Training Loop with Overfit Guard + Auto-Snapshot
+    for epoch in range(start_epoch, epochs):
         model.train()
         train_loss = 0.0
         for bX, bC, bY in train_loader:
@@ -176,15 +235,21 @@ def train_with_guard(epochs=1000):
         # Best model tracker
         if v_avg < best_val_loss:
             best_val_loss = v_avg
-            torch.save(model.state_dict(), "models/universal_oracle_best.pth")
+            best_path = f"{LOCAL_SNAP_DIR}/universal_oracle_best.pth"
+            torch.save({"epoch": epoch+1, "model_state": model.state_dict(), "best_val_loss": best_val_loss}, best_path)
+            if os.path.exists("/content/drive"):
+                os.makedirs(DRIVE_SNAP_DIR, exist_ok=True)
+                shutil.copy(best_path, f"{DRIVE_SNAP_DIR}/universal_oracle_best.pth")
 
-        # Auto-Snapshot every 50 epochs
+        # Auto-Snapshot every 50 epochs → saved to Drive
         if (epoch + 1) % 50 == 0:
-            snap_path = f"models/universal_oracle_snap_{epoch+1}.pth"
-            torch.save(model.state_dict(), snap_path)
-            console.print(f"  [bold cyan]SNAPSHOT:[/bold cyan] {snap_path} | Best Val: [bold green]{best_val_loss:.4f}[/bold green]")
+            _save_snapshot(model, epoch+1, best_val_loss)
 
-    torch.save(model.state_dict(), "models/universal_oracle_guarded_v2.pth")
+    final_local = f"{LOCAL_SNAP_DIR}/universal_oracle_guarded_v2.pth"
+    torch.save({"epoch": epochs, "model_state": model.state_dict(), "best_val_loss": best_val_loss}, final_local)
+    if os.path.exists("/content/drive"):
+        os.makedirs(DRIVE_SNAP_DIR, exist_ok=True)
+        shutil.copy(final_local, f"{DRIVE_SNAP_DIR}/universal_oracle_guarded_v2.pth")
     console.print(f"\n[bold green]CLOUD SIEGE GUARD COMPLETE.[/bold green] Best Val Loss: [bold yellow]{best_val_loss:.4f}[/bold yellow]")
 
 
