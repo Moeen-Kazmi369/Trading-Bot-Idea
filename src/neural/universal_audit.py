@@ -28,7 +28,7 @@ class UniversalAuditRunner:
         
         self.initial_balance = initial_balance
         self.fee_rate = 0.0008
-        self.conviction_gate = 0.60
+        self.conviction_gate = 0.52
 
     async def run_audit(self, timeframe_mins):
         console.print(f"[bold cyan]AUDIT {timeframe_mins}m:[/bold cyan] Scanning Grid (Gate 60%)...")
