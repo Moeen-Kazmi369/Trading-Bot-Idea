@@ -15,7 +15,7 @@ class UniversalAuditRunner:
     Project Chronos - Triple-Timeframe Verdict (v2.0)
     Validates Universality across Micro, Tactical, and Macro grids.
     """
-    def __init__(self, model_path="models/universal_oracle_v2_final.pth", initial_balance=400.00):
+    def __init__(self, model_path="models/universal_oracle_snap_300.pth", initial_balance=400.00):
         self.seq_len = 50
         self.brain = UniversalOracleV2(feature_dim=30, hidden_dim=256)
         
