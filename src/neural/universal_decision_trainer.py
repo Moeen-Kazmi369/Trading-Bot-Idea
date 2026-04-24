@@ -254,4 +254,9 @@ def train_with_guard(epochs=1000):
 
 
 if __name__ == "__main__":
-    train_with_guard()
+    import argparse
+    parser = argparse.ArgumentParser(description="Universal Mastery Forge Trainer")
+    parser.add_argument("--epochs", type=int, default=1000, help="Number of epochs to train (default: 1000)")
+    args = parser.parse_args()
+    
+    train_with_guard(epochs=args.epochs)
